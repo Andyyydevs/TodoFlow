@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TodoFlow - Modern Task Management</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css"
+        integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg=="
+        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" href="./styles.css">
+    
+</head>
+
+<body>
+    <!-- Authentication Section -->
+    <section id="auth">
+        <div class="auth-card fade-in">
+            <div class="auth-header">
+                <h2 id="authTitle">Welcome Back</h2>
+                <p id="authSubtitle">Sign in to your account</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+
+            <form id="authForm">
+                <div class="form-group">
+                    <input id="emailInput" class="form-input" placeholder="Email address" type="email" required />
+                </div>
+                <div class="form-group">
+                    <input id="passwordInput" class="form-input" placeholder="Password" type="password" required />
+                </div>
+                <button id="authBtn" type="submit" class="btn btn-primary">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Sign In
+                </button>
+            </form>
+
+            <div class="divider"></div>
+
+            <div class="toggle-auth">
+                <p id="toggleText">Don't have an account?</p>
+                <button id="toggleBtn" type="button" class="btn btn-secondary">Create Account</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Dashboard Section -->
+    <div id="dashboard" class="dashboard">
+        <div class="container">
+            <header class="dashboard-header">
+                <h1 id="dashboardTitle" class="dashboard-title">You have 0 tasks</h1>
+                <p class="dashboard-subtitle">Stay organized and get things done</p>
+                <div class="user-info">
+                    <span id="userEmail"></span>
+                    <button id="logoutBtn" class="logout-btn">
+                        <i class="fas fa-sign-out-alt"></i>
+                        Logout
+                    </button>
+                </div>
+            </header>
+
+            <nav class="nav-tabs">
+                <button class="tab-button active" data-tab="all">
+                    <div class="tab-content">
+                        <div class="tab-title">All Tasks</div>
+                        <div class="tab-count" id="allCount">(0)</div>
+                    </div>
+                </button>
+                <button class="tab-button" data-tab="open">
+                    <div class="tab-content">
+                        <div class="tab-title">Open</div>
+                        <div class="tab-count" id="openCount">(0)</div>
+                    </div>
+                </button>
+                <button class="tab-button" data-tab="completed">
+                    <div class="tab-content">
+                        <div class="tab-title">Completed</div>
+                        <div class="tab-count" id="completedCount">(0)</div>
+                    </div>
+                </button>
+            </nav>
+
+            <main class="todo-container">
+                <div class="add-todo">
+                    <form id="addTodoForm" class="add-todo-form">
+                        <input id="todoInput" class="add-todo-input" placeholder="What needs to be done?" required />
+                        <button type="submit" class="add-btn">
+                            <i class="fas fa-plus"></i>
+                        </button>
+                    </form>
+                </div>
+                <div id="todoList" class="todo-list">
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        class TodoApp {
+            constructor() {
+                this.token = null;
+                this.isRegistration = false;
+                this.selectedTab = 'all';
+                this.todos = [];
+                this.isLoading = false;
+                this.userEmail = '';
+                this.apiBase = '/';
+                
+                this.init();
+            }
+
+            init() {
+                this.bindEvents();
+                this.token = localStorage.getItem('token');
+                
+                if (this.token) {
+                    this.showDashboard();
+                }
+            }
+
+            bindEvents() {
+                // Auth events
+                document.getElementById('authForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.authenticate();
+                });
+                
+                document.getElementById('toggleBtn').addEventListener('click', () => {
+                    this.toggleAuthMode();
+                });
+
+                // Dashboard events
+                document.getElementById('logoutBtn').addEventListener('click', () => {
+                    this.logout();
+                });
+
+                document.getElementById('addTodoForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.addTodo();
+                });
+
+                // Tab events
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        this.changeTab(btn.dataset.tab);
+                    });
+                });
+            }
+
+            toggleAuthMode() {
+                this.isRegistration = !this.isRegistration;
+                
+                const authTitle = document.getElementById('authTitle');
+                const authSubtitle = document.getElementById('authSubtitle');
+                const authBtn = document.getElementById('authBtn');
+                const toggleText = document.getElementById('toggleText');
+                const toggleBtn = document.getElementById('toggleBtn');
+
+                if (this.isRegistration) {
+                    authTitle.textContent = 'Create Account';
+                    authSubtitle.textContent = 'Join us and start organizing';
+                    authBtn.innerHTML = '<i class="fas fa-user-plus"></i> Create Account';
+                    toggleText.textContent = 'Already have an account?';
+                    toggleBtn.textContent = 'Sign In';
+                } else {
+                    authTitle.textContent = 'Welcome Back';
+                    authSubtitle.textContent = 'Sign in to your account';
+                    authBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Sign In';
+                    toggleText.textContent = "Don't have an account?";
+                    toggleBtn.textContent = 'Create Account';
+                }
+            }
+
+            showError(message) {
+                const errorEl = document.getElementById('errorMessage');
+                errorEl.textContent = message;
+                errorEl.style.display = 'block';
+                
+                setTimeout(() => {
+                    errorEl.style.display = 'none';
+                }, 5000);
+            }
+
+            async authenticate() {
+                const email = document.getElementById('emailInput').value.trim();
+                const password = document.getElementById('passwordInput').value;
+                const authBtn = document.getElementById('authBtn');
+
+                if (!email || !password || password.length < 6 || !email.includes('@')) {
+                    this.showError('Please enter a valid email and password (min 6 characters)');
+                    return;
+                }
+
+                authBtn.disabled = true;
+                authBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Please wait...';
+
+                try {
+                    const endpoint = this.isRegistration ? 'auth/register' : 'auth/login';
+                    const response = await fetch(this.apiBase + endpoint, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username: email, password })
+                    });
+
+                    const data = await response.json();
+
+                    if (data.token) {
+                        this.token = data.token;
+                        this.userEmail = email;
+                        localStorage.setItem('token', this.token);
+                        await this.showDashboard();
+                    } else {
+                        throw new Error(data.message || 'Authentication failed');
+                    }
+                } catch (error) {
+                    this.showError(error.message);
+                } finally {
+                    authBtn.disabled = false;
+                    authBtn.innerHTML = this.isRegistration ? 
+                        '<i class="fas fa-user-plus"></i> Create Account' : 
+                        '<i class="fas fa-sign-in-alt"></i> Sign In';
+                }
+            }
+
+            logout() {
+                this.token = null;
+                this.userEmail = '';
+                this.todos = [];
+                localStorage.removeItem('token');
+                
+                document.getElementById('auth').style.display = 'flex';
+                document.getElementById('dashboard').style.display = 'none';
+                
+                // Reset form
+                document.getElementById('emailInput').value = '';
+                document.getElementById('passwordInput').value = '';
+            }
+
+            async showDashboard() {
+                document.getElementById('auth').style.display = 'none';
+                document.getElementById('dashboard').style.display = 'block';
+                
+                document.getElementById('userEmail').textContent = this.userEmail;
+                
+                await this.fetchTodos();
+            }
+
+            async fetchTodos() {
+                this.isLoading = true;
+                this.renderLoading();
+
+                try {
+                    const response = await fetch(this.apiBase + 'todos', {
+                        headers: { 'Authorization': this.token }
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Failed to fetch todos');
+                    }
+                    
+                    this.todos = await response.json();
+                } catch (error) {
+                    console.error('Error fetching todos:', error);
+                    this.showError('Failed to load todos');
+                } finally {
+                    this.isLoading = false;
+                    this.renderTodos();
+                }
+            }
+
+            renderLoading() {
+                document.getElementById('todoList').innerHTML = `
+                    <div class="loading">
+                        <div class="spinner"></div>
+                    </div>
+                `;
+            }
+
+            updateCounts() {
+                const allCount = this.todos.length;
+                const openCount = this.todos.filter(todo => !todo.completed).length;
+                const completedCount = this.todos.filter(todo => todo.completed).length;
+
+                document.getElementById('allCount').textContent = `(${allCount})`;
+                document.getElementById('openCount').textContent = `(${openCount})`;
+                document.getElementById('completedCount').textContent = `(${completedCount})`;
+
+                // Update dashboard title
+                const dashboardTitle = document.getElementById('dashboardTitle');
+                if (openCount === 0) {
+                    dashboardTitle.textContent = 'All caught up! 🎉';
+                } else {
+                    dashboardTitle.textContent = `You have ${openCount} ${openCount === 1 ? 'task' : 'tasks'} to complete`;
+                }
+            }
+
+            changeTab(tab) {
+                this.selectedTab = tab;
+                
+                // Update active tab
+                document.querySelectorAll('.tab-button').forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tab === tab);
+                });
+                
+                this.renderTodos();
+            }
+
+            getFilteredTodos() {
+                switch (this.selectedTab) {
+                    case 'open':
+                        return this.todos.filter(todo => !todo.completed);
+                    case 'completed':
+                        return this.todos.filter(todo => todo.completed);
+                    default:
+                        return this.todos;
+                }
+            }
+
+            renderTodos() {
+                this.updateCounts();
+                
+                const todoList = document.getElementById('todoList');
+                const filteredTodos = this.getFilteredTodos();
+
+                if (filteredTodos.length === 0) {
+                    const emptyMessages = {
+                        all: { icon: 'fas fa-clipboard-list', title: 'No tasks yet', subtitle: 'Add your first task above' },
+                        open: { icon: 'fas fa-check-circle', title: 'All done!', subtitle: 'No open tasks remaining' },
+                        completed: { icon: 'fas fa-history', title: 'No completed tasks', subtitle: 'Complete some tasks to see them here' }
+                    };
+                    
+                    const message = emptyMessages[this.selectedTab];
+                    
+                    todoList.innerHTML = `
+                        <div class="empty-state">
+                            <div class="empty-icon">
+                                <i class="${message.icon}"></i>
+                            </div>
+                            <div class="empty-title">${message.title}</div>
+                            <div class="empty-subtitle">${message.subtitle}</div>
+                        </div>
+                    `;
+                    return;
+                }
+
+                const todoHTML = filteredTodos.map(todo => `
+                    <div class="todo-item ${todo.completed ? 'completed' : ''}" data-id="${todo.id}">
+                        <div class="todo-content">
+                            <div class="todo-text">${this.escapeHtml(todo.task)}</div>
+                        </div>
+                        <div class="todo-actions">
+                            ${!todo.completed ? `
+                                <button class="btn btn-success btn-sm" onclick="app.updateTodo(${todo.id})">
+                                    <i class="fas fa-check"></i>
+                                    Done
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-danger btn-sm" onclick="app.deleteTodo(${todo.id})">
+                                <i class="fas fa-trash"></i>
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                `).join('');
+
+                todoList.innerHTML = todoHTML;
+            }
+
+            escapeHtml(text) {
+                const div = document.createElement('div');
+                div.textContent = text;
+                return div.innerHTML;
+            }
+
+            async addTodo() {
+                const todoInput = document.getElementById('todoInput');
+                const task = todoInput.value.trim();
+
+                if (!task) return;
+
+                try {
+                    const response = await fetch(this.apiBase + 'todos', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': this.token
+                        },
+                        body: JSON.stringify({ task })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to add todo');
+                    }
+
+                    todoInput.value = '';
+                    await this.fetchTodos();
+                } catch (error) {
+                    console.error('Error adding todo:', error);
+                    this.showError('Failed to add task');
+                }
+            }
+
+            async updateTodo(id) {
+                const todo = this.todos.find(t => t.id === id);
+                if (!todo) return;
+
+                try {
+                    const response = await fetch(this.apiBase + 'todos/' + id, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': this.token
+                        },
+                        body: JSON.stringify({ task: todo.task, completed: 1 })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to update todo');
+                    }
+
+                    await this.fetchTodos();
+                } catch (error) {
+                    console.error('Error updating todo:', error);
+                    this.showError('Failed to update task');
+                }
+            }
+
+            async deleteTodo(id) {
+                if (!confirm('Are you sure you want to delete this task?')) return;
+
+                try {
+                    const response = await fetch(this.apiBase + 'todos/' + id, {
+                        method: 'DELETE',
+                        headers: { 'Authorization': this.token }
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Failed to delete todo');
+                    }
+
+                    await this.fetchTodos();
+                } catch (error) {
+                    console.error('Error deleting todo:', error);
+                    this.showError('Failed to delete task');
+                }
+            }
+        }
+
+        // Initialize the app
+        const app = new TodoApp();
+    </script>
+</body>
+
+</html>

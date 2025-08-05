@@ -1,0 +1,19 @@
+{
+  "name": "todoflow",
+  "version": "1.0.0",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env ./src/server.js",
+    "dev": "node --watch --env-file=.env ./src/server.js"
+  },
+  "keywords": [],
+  "author": "Andrew Morgan",
+  "license": "MIT",
+  "description": "Full stack todo application",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2"
+  }
+}
